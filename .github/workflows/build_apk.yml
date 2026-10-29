@@ -13,7 +13,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -25,24 +25,54 @@ jobs:
           flutter-version: '3.19.0'
           channel: 'stable'
 
-      - name: Generate Android Folder and Permissions
+      - name: Create Flutter Project Structure
         run: |
-          cp pubspec.yaml /tmp/pubspec.yaml
-          cp lib/main.dart /tmp/main.dart
-          flutter create --platforms=android --org com.repair.radar .
-          cp /tmp/pubspec.yaml pubspec.yaml
-          cp /tmp/main.dart lib/main.dart
+          rm -rf pubspec.yaml
+          flutter create . --org com.repair.radar --project-name smart_repair_radar --platforms=android
+
+      - name: Restore pubspec and main
+        run: |
+          cat << 'EOF' > pubspec.yaml
+          name: smart_repair_radar
+          description: مساعد فني صيانة الموبايلات الذكي
+          publish_to: 'none'
+          version: 1.0.0+1
+          environment:
+            sdk: '>=3.0.0 <4.0.0'
+          dependencies:
+            flutter:
+              sdk: flutter
+            http: ^1.2.0
+            image_picker: ^1.0.7
+            flutter_inappwebview: ^6.0.0
+            google_generative_ai: ^0.4.0
+            sqflite: ^2.3.0
+            path: ^1.8.3
+            path_provider: ^2.1.2
+            share_plus: ^7.2.2
+            file_picker: ^6.1.1
+            shared_preferences: ^2.2.2
+          dev_dependencies:
+            flutter_test:
+              sdk: flutter
+            flutter_lints: ^3.0.0
+          flutter:
+            uses-material-design: true
+          EOF
+
+      - name: Fix MinSdk and Permissions
+        run: |
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
           sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' android/app/build.gradle
           sed -i 's/<application/<uses-permission android:name="android.permission.INTERNET"\/><uses-permission android:name="android.permission.CAMERA"\/><uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"\/><application/g' android/app/src/main/AndroidManifest.xml
 
-      - name: Install Dependencies
+      - name: Get Dependencies
         run: flutter pub get
 
-      - name: Build APK
+      - name: Build Release APK
         run: flutter build apk --release --no-tree-shake-icons
 
-      - name: Upload APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Smart-Repair-Radar-APK
