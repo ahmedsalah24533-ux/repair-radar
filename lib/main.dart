@@ -52,7 +52,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('repair_faults_v4.db');
+    _database = await _initDB('repair_faults_v5.db');
     return _database!;
   }
 
@@ -162,7 +162,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   }
 }
 
-// ==================== التبويب الأول: موسوعة الأعطال (سوفت وهارد) ====================
+// ==================== التبويب الأول: موسوعة الأعطال ====================
 class FaultsLibraryTab extends StatefulWidget {
   const FaultsLibraryTab({super.key});
 
@@ -335,7 +335,7 @@ class _FaultsLibraryTabState extends State<FaultsLibraryTab> {
   }
 }
 
-// ==================== التبويب الثاني: رادار فيسبوك الشامل (سوفت + هارد) ====================
+// ==================== التبويب الثاني: رادار فيسبوك المعدل والمطور ====================
 class FacebookRadarTab extends StatefulWidget {
   const FacebookRadarTab({super.key});
 
@@ -347,7 +347,7 @@ class _FacebookRadarTabState extends State<FacebookRadarTab> {
   InAppWebViewController? _webController;
   bool _isRadarRunning = false;
   Timer? _humanScrollTimer;
-  String _statusMessage = 'الرادار جاهز: يجمع كل أعطال السوفت وير والهارد وير بدون تكرار';
+  String _statusMessage = 'الرادار جاهز: يمسح ويقرأ كل بوستات الصفحة الحالية';
   int _extractedCount = 0;
   final Set<String> _processedSignatures = {};
 
@@ -364,7 +364,7 @@ class _FacebookRadarTabState extends State<FacebookRadarTab> {
     setState(() {
       _isRadarRunning = !_isRadarRunning;
       _statusMessage = _isRadarRunning
-          ? '🟢 الرادار يعمل: يمسح منشورات السوفت والهارد وير بدقة...'
+          ? '🟢 الرادار يعمل بنشاط ويلتقط المنشورات الآن...'
           : '⏸ تم إيقاف الرادار مؤقتاً';
     });
 
@@ -378,44 +378,65 @@ class _FacebookRadarTabState extends State<FacebookRadarTab> {
   void _startHumanLikeBrowsing(String apiKey) {
     void scheduleNextStep() {
       if (!_isRadarRunning) return;
-      final randomSeconds = Random().nextInt(5) + 6;
+      final randomSeconds = Random().nextInt(4) + 5; // فحص أسرع كل 5-8 ثواني
       _humanScrollTimer = Timer(Duration(seconds: randomSeconds), () async {
         if (!_isRadarRunning || _webController == null) return;
 
+        // سكريبت متطور لفحص عناصر الصفحة والبوستات بمرونة تامة
         final jsResult = await _webController!.evaluateJavascript(source: '''
           (function() {
-            var scrollDist = Math.floor(Math.random() * 350) + 300;
-            window.scrollBy({ top: scrollDist, behavior: 'smooth' });
+            window.scrollBy({ top: 350, behavior: 'smooth' });
 
-            var spans = document.querySelectorAll('span, div[role="button"]');
-            spans.forEach(function(el) {
+            // الضغط على أزرار "عرض المزيد" تلقائياً
+            var buttons = document.querySelectorAll('div[role="button"], span');
+            buttons.forEach(function(el) {
               if (el.innerText === 'عرض المزيد' || el.innerText === 'See more') {
                 el.click();
               }
             });
 
-            var posts = [];
-            var blocks = document.querySelectorAll('div[data-tracking-duration-id], div[role="article"], article');
-            blocks.forEach(function(b) {
-              var txt = b.innerText || "";
-              var imgs = b.querySelectorAll('img');
-              var bestImgUrl = "";
-              var maxArea = 0;
-              imgs.forEach(function(img) {
+            // استخراج النصوص والصور من جميع عناصر الفيسبوك في الشاشة
+            var collectedData = [];
+            var articles = document.querySelectorAll('article, div[role="article"], div.story_body_container, div._5r67');
+            
+            if (articles.length === 0) {
+              // طريقة بديلة لو كانت صفحة محمولة بسيطة
+              articles = document.querySelectorAll('div[data-ft]');
+            }
+
+            articles.forEach(function(art) {
+              var text = art.innerText || "";
+              var images = art.querySelectorAll('img');
+              var bestImg = "";
+              var maxSz = 0;
+
+              images.forEach(function(img) {
                 var w = img.naturalWidth || img.width || 0;
                 var h = img.naturalHeight || img.height || 0;
                 var src = img.src || "";
-                if (w > 150 && h > 150 && (w * h) > maxArea && src.startsWith('http') && !src.includes('emoji')) {
-                  maxArea = w * h;
-                  bestImgUrl = src;
+                // استبعاد الصور الصغيرة والأيقونات
+                if (w > 100 && h > 100 && (w * h) > maxSz && src.startsWith('http') && !src.includes('emoji') && !src.includes('profile')) {
+                  maxSz = w * h;
+                  bestImg = src;
                 }
               });
 
-              if (txt.length > 15 || bestImgUrl !== "") {
-                posts.push({ text: txt, imageUrl: bestImgUrl });
+              if (text.length > 10 || bestImg !== "") {
+                collectedData.push({ text: text, imageUrl: bestImg });
               }
             });
-            return JSON.stringify(posts);
+
+            // لو لم يجد articles، يجمع أي نص طويل في الصفحة الظاهرة
+            if (collectedData.length === 0) {
+              var allDivs = document.querySelectorAll('div');
+              allDivs.forEach(function(div) {
+                if (div.innerText && div.innerText.length > 40 && div.innerText.length < 1000) {
+                  collectedData.push({ text: div.innerText, imageUrl: "" });
+                }
+              });
+            }
+
+            return JSON.stringify(collectedData.slice(0, 5)); // أخذ أول 5 بوستات ظاهرة لتجنب الضغط
           })();
         ''');
 
@@ -426,7 +447,7 @@ class _FacebookRadarTabState extends State<FacebookRadarTab> {
               final String cleanText = (postObj['text'] ?? '').toString().trim();
               final String imageUrl = (postObj['imageUrl'] ?? '').toString().trim();
               
-              if (cleanText.length > 15 || imageUrl.isNotEmpty) {
+              if (cleanText.length > 10 || imageUrl.isNotEmpty) {
                 await _analyzeAndSavePost(cleanText, imageUrl, apiKey);
               }
             }
@@ -447,8 +468,8 @@ class _FacebookRadarTabState extends State<FacebookRadarTab> {
 
       if (imageUrl.isNotEmpty) {
         try {
-          final imgResponse = await http.get(Uri.parse(imageUrl)).timeout(const Duration(seconds: 6));
-          if (imgResponse.statusCode == 200 && imgResponse.bodyBytes.length > 3000) {
+          final imgResponse = await http.get(Uri.parse(imageUrl)).timeout(const Duration(seconds: 5));
+          if (imgResponse.statusCode == 200 && imgResponse.bodyBytes.length > 2000) {
             imageBytes = imgResponse.bodyBytes;
             base64Image = base64Encode(imageBytes);
           }
@@ -457,18 +478,18 @@ class _FacebookRadarTabState extends State<FacebookRadarTab> {
 
       final model = GenerativeModel(model: 'gemini-1.5-flash', apiKey: apiKey);
       final promptText = '''
-أنت مهندس صيانة موبايلات شامل (سوفت وير وهارد وير). حلل هذا المنشور وصورة الشاشة أو البوردة المرفقة:
+أنت مهندس صيانة موبايلات خبير. حلل النص والصورة المرفقة:
 النص: "$postText"
 
-مطلوب استخراج البيانات وصياغتها بصيغة JSON فقط بدون أي كلام إضافي:
+استخرج البيانات بصيغة JSON فقط بدون أي نص إضافي:
 {
   "brand": "اسم الشركة مثل Samsung أو Xiaomi أو iPhone أو عام",
   "model": "موديل الهاتف أو غير محدد",
-  "fault_category": "تصنيف العطل (سوفت وير / فلاشة / إيميال / بوت لودر / هاردوير - باور / شحن / إضاءة / شبكة)",
-  "symptoms": "مشكلة الهاتف أو أعراض السوفت/الهارد باختصار",
-  "solution": "شرح الحل المفصل سواء خطوات السوفت وير (الأداة، الثري آبي، الثغرة) أو خطوات الهارد وير",
-  "ic_or_lines": "أدوات السوفت وير المستخدمة أو الآيسيهات والمسارات في الهاردوير",
-  "unique_solution_hash": "بصمة فريدة تلخص تفاصيل الحل أو فلاشة السوفت لمنع التكرار تماماً"
+  "fault_category": "التصنيف (سوفت وير / فلاشة / FRP / هاردوير - باور / شحن / إضاءة / شبكة / صوت)",
+  "symptoms": "وصف المشكلة باختصار",
+  "solution": "تفاصيل الحل أو الشرح أو الخطوات",
+  "ic_or_lines": "الآيسيهات أو الأدوات أو المسارات",
+  "unique_solution_hash": "بصمة فريدة مختصرة للنص لمنع التكرار"
 }
 ''';
 
@@ -506,7 +527,7 @@ class _FacebookRadarTabState extends State<FacebookRadarTab> {
         if (mounted) {
           setState(() {
             _extractedCount++;
-            _statusMessage = '✅ تم صيد عطل (${data['fault_category']}): ${data['brand']} ${data['model']}';
+            _statusMessage = '✅ تم صيد عطل: ${data['brand']} ${data['model']}';
           });
         }
       }
@@ -523,7 +544,7 @@ class _FacebookRadarTabState extends State<FacebookRadarTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('رادار فيسبوك (سوفت + هارد)'),
+        title: const Text('رادار فيسبوك الذكي'),
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -628,7 +649,7 @@ class _BackupAndSettingsTabState extends State<BackupAndSettingsTab> {
       final directory = await getTemporaryDirectory();
       final backupFile = File('${directory.path}/repair_faults_backup.json');
       await backupFile.writeAsString(jsonString);
-      await Share.shareXFiles([XFile(backupFile.path)], text: 'نسخة احتياطية شاملة ($_totalSavedFaults عطل سوفت وهارد)');
+      await Share.shareXFiles([XFile(backupFile.path)], text: 'نسخة احتياطية شاملة ($_totalSavedFaults عطل)');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
     }
@@ -658,6 +679,9 @@ class _BackupAndSettingsTabState extends State<BackupAndSettingsTab> {
   }
 
   @override
+  Widget andBuild(BuildContext context) => build(context);
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('نقل البيانات والإعدادات')),
@@ -672,7 +696,7 @@ class _BackupAndSettingsTabState extends State<BackupAndSettingsTab> {
               child: ListTile(
                 leading: const Icon(Icons.storage, size: 40, color: Colors.tealAccent),
                 title: const Text('إجمالي الأعطال والحلول المحفوظة', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text('$_totalSavedFaults عطل سوفت وير وهارد وير مسجل'),
+                subtitle: Text('$_totalSavedFaults عطل مسجل بدون إنترنت'),
                 trailing: IconButton(icon: const Icon(Icons.refresh), onPressed: _loadSettingsAndStats),
               ),
             ),
